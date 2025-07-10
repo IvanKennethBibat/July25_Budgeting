@@ -29,11 +29,11 @@ def test_calculate_budget_zero_income():
 def test_calculate_budget_high_income():
     bm = BudgetManager(10000)
     plan = bm.calculate_budget()
-    assert plan["Debt"] == 200
-    assert plan["Dates"] == 100
-    assert plan["Needs"] == 2500.00
-    assert plan["Wants"] == 1500.00
-    assert plan["Savings"] == 6200.00
+    assert plan["Debt"] == pytest.approx(200)
+    assert plan["Dates"] == pytest.approx(100)
+    assert plan["Needs"] == pytest.approx(2500.00)
+    assert plan["Wants"] == pytest.approx(1500.00)
+    assert plan["Savings"] == pytest.approx(5700.00)
 
 def test_plan_is_dict():
     bm = BudgetManager(5000)
