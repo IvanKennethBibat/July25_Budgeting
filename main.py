@@ -16,7 +16,7 @@ class BudgetWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle(" ")
         self.setWindowIcon(QIcon("assets/heart_moneybag_10072025.png")) 
-        self.setFixedSize(1600, 1200)
+        self.setFixedSize(1600, 800)
 
         # === Create Nav Buttons ===
         self.btn_nav_dashboard = QPushButton("Dashboard")
@@ -157,9 +157,9 @@ def main():
     window = BudgetWindow()
 
     font_id = QFontDatabase.addApplicationFont("assets/fonts/Inter_28pt-Regular.ttf")
-    front_id_semibold = QFontDatabase.addApplicationFont("assets/fonts/Inter_28pt-SemiBold.ttf")
+    font_id_semibold = QFontDatabase.addApplicationFont("assets/fonts/Inter_28pt-SemiBold.ttf")
     font_family = QFontDatabase.applicationFontFamilies(font_id)[0]
-    font_family_semibold = QFontDatabase.applicationFontFamilies(front_id_semibold)[0]
+    font_family_semibold = QFontDatabase.applicationFontFamilies(font_id_semibold)[0]
 
     app.setFont(QFont(font_family, 18))  # Set default font to Inter Regular
 
