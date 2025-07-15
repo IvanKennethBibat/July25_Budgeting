@@ -2,14 +2,17 @@ import sys
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QLineEdit, QPushButton, QLabel,
     QStackedWidget, QTableWidget, QTableWidgetItem, QHBoxLayout, QApplication, 
-    QDialog, QButtonGroup, QSizePolicy
+    QDialog, QButtonGroup, QSizePolicy, 
+
 )
-from PyQt6.QtGui import QIcon, QFontDatabase, QFont
+from PyQt6.QtCharts import QChart, QChartView, QPieSeries, QPieSlice
+import datetime
+from PyQt6.QtGui import QIcon, QFontDatabase, QFont, QDoubleValidator, QColor
 from layout_colorwidget import Color  # Assuming this is the correct import path
 from budget_manager import BudgetManager
+from allocation_widget import AllocationWidget
 from database import init_db, save_budget, get_budgets
 init_db()
-
 
 class BudgetWindow(QMainWindow):
     def __init__(self):
@@ -17,6 +20,8 @@ class BudgetWindow(QMainWindow):
         self.setWindowTitle(" ")
         self.setWindowIcon(QIcon("assets/heart_moneybag_10072025.png")) 
         self.setFixedSize(1600, 800)
+
+        self.budget_manager = BudgetManager(0, 0)
 
         # === Create Nav Buttons ===
         self.btn_nav_dashboard = QPushButton("Dashboard")
@@ -108,28 +113,60 @@ class BudgetWindow(QMainWindow):
         container.setLayout(main_layout)
         self.setCentralWidget(container)
 
-    def handle_nav_click(self, index):
-        """Handle navigation button clicks to switch pages."""
-        self.stacked.setCurrentIndex(index)
-        self.nav_buttons.button(index).setChecked(True)
+        self.btn_calculate.clicked.connect(self.handle_calculate)
+        self.nav_buttons.idClicked.connect(self.handle_nav_click)
 
     def build_budget_page(self):
         layout = QVBoxLayout()
+        layout.setSpacing(15)
+        layout.setContentsMargins(20, 20, 20, 20) 
 
+        layout.addWidget(QLabel("<b>Income & Expenses</b>"))
+
+        # Input fields
         self.input_income = QLineEdit()
-        self.input_income.setPlaceholderText("Enter Income")
+        self.input_income.setPlaceholderText("Enter Monthly Income")
+        self.input_income.setValidator(QDoubleValidator(0, 1000000, 2, self)) 
 
+        self.input_expenditure = QLineEdit()
+        self.input_expenditure.setPlaceholderText("Enter Monthly Expenditure")
+        self.input_expenditure.setValidator(QDoubleValidator(0, 1000000, 2, self))
+        
+        # Calculate button
         self.btn_calculate = QPushButton("Calculate Budget")
-
+        
+        # Result display
         self.result_label = QLabel("Results will appear here")
         self.result_label.setWordWrap(True)
 
+        layout.addWidget(QLabel("<b>Budget Allocation</b>"))
+        # Allocation Widget - This handles the spinboxes/progress bars
+        self.allocation_widget = AllocationWidget(
+            initial_allocation={"Needs": 50, "Wants": 30, "Savings": 20},
+            parent=self  # Important for accessing parent methods
+        )
+
+        # Chart Setup
+        self.series = QPieSeries()
+        self.chart = QChart()
+        self.chart.addSeries(self.series)
+        self.chart.setTitle("Budget Allocation")
+        self.chart.legend().setVisible(True)
+        self.chart_view = QChartView(self.chart)
+        
+        # Add widgets to layout in logical order
         layout.addWidget(self.input_income)
+        layout.addWidget(self.input_expenditure)
+        layout.addWidget(self.allocation_widget)  # Allocation comes after inputs
+        layout.addWidget(self.chart_view)          # Chart below allocation controls
         layout.addWidget(self.btn_calculate)
         layout.addWidget(self.result_label)
-        
+
         widget = QWidget()
         widget.setLayout(layout)
+        
+        # Initialize pie chart with starting values
+        self.update_pie_chart()
         return widget
 
     def build_history_page(self):
@@ -152,59 +189,81 @@ class BudgetWindow(QMainWindow):
 
             return widget
 
-def main():
-    app = QApplication(sys.argv)
-    window = BudgetWindow()
-
-    font_id = QFontDatabase.addApplicationFont("assets/fonts/Inter_28pt-Regular.ttf")
-    font_id_semibold = QFontDatabase.addApplicationFont("assets/fonts/Inter_28pt-SemiBold.ttf")
-    font_family = QFontDatabase.applicationFontFamilies(font_id)[0]
-    font_family_semibold = QFontDatabase.applicationFontFamilies(font_id_semibold)[0]
-
-    app.setFont(QFont(font_family, 18))  # Set default font to Inter Regular
-
-
-    def handle_calculate():
+    def handle_calculate(self):
         try:
-            income = float(window.input_income.text())
-            bm = BudgetManager(income)
-            plan = bm.calculate_budget()
+            income = float(self.input_income.text())
+            expenditure = float(self.input_expenditure.text())
 
-            # Save to SQLite
-            from datetime import datetime
+            # Update manager with current allocation
+            self.budget_manager.income = income
+            self.budget_manager.expenditure = expenditure
+            self.budget_manager.allocation = self.allocation_widget.get_allocation()
+            
+            plan = self.budget_manager.calculate_budget()
+
+            # Save to database
             month = datetime.now().strftime("%Y-%m")
             save_budget(month, income, plan)
 
+            # Update results
             summary = "\n".join([f"{k}: €{v}" for k, v in plan.items()])
-            window.result_label.setText("Saved!\n" + summary)
+            self.result_label.setText("Saved!\n" + summary)
 
         except ValueError:
-            window.result_label.setText("Please enter a valid number.")
+            self.result_label.setText("Please enter valid numbers")
 
-    def show_history():
-        """Fetch and display budget history in the history table."""
-        # Clear the table before populating it, to avoid errors
-        window.history_table.clearContents()
+    def handle_nav_click(self, index):
+        """Handle navigation with page-specific logic"""
+        self.stacked.setCurrentIndex(index)
+        self.nav_buttons.button(index).setChecked(True)
+        
+        # Add page-specific initialization
+        if index == 4:  # History page index
+            self.update_history_table()
 
-        # Fetch history data from the database
+    def update_history_table(self):
+        """Populate history table (Moved from main)"""
+        self.history_table.clearContents()
         history_data = get_budgets()
-        window.history_table.setRowCount(len(history_data))
+        self.history_table.setRowCount(len(history_data))
 
         for row_idx, row_data in enumerate(history_data):
             for col_idx, value in enumerate(row_data):
-                item = QTableWidgetItem(str(value))
-                window.history_table.setItem(row_idx, col_idx, item)
+                self.history_table.setItem(
+                    row_idx, 
+                    col_idx, 
+                    QTableWidgetItem(str(value)))
+    
+    def update_pie_chart(self):
+        """Update pie chart with current allocation percentages"""
+        self.series.clear()
+        
+        # Get current allocation from budget manager
+        allocation = self.budget_manager.allocation
+        
+        # Add slices with colors
+        needs_slice = self.series.append(f"Needs ({allocation['Needs']}%)", allocation['Needs'])
+        needs_slice.setColor(QColor("#4e79a7"))  # Blue
+        
+        wants_slice = self.series.append(f"Wants ({allocation['Wants']}%)", allocation['Wants'])
+        wants_slice.setColor(QColor("#f28e2c"))  # Orange
+        
+        savings_slice = self.series.append(f"Savings ({allocation['Savings']}%)", allocation['Savings'])
+        savings_slice.setColor(QColor("#59a14f"))  # Green
+        
+        # Optional: Add labels to slices
+        for slice in self.series.slices():
+            slice.setLabelVisible(True)
+            slice.setLabelPosition(QPieSlice.LabelPosition.Outside)
 
-        window.stacked.setCurrentIndex(1)
+def main():
+    app = QApplication(sys.argv)
 
-    # Hook up navigation buttons
-    window.btn_nav_budget.clicked.connect(lambda: window.stacked.setCurrentIndex(0))
-    window.btn_nav_history.clicked.connect(lambda: (show_history(), window.stacked.setCurrentIndex(1)))
+    QFontDatabase.addApplicationFont("assets/fonts/Inter_28pt-Regular.ttf")
+    QFontDatabase.addApplicationFont("assets/fonts/Inter_28pt-SemiBold.ttf")
+    app.setFont(QFont("Inter", 18))  # Set default font to Inter Regular
 
-    # Hooked up core logic
-    window.btn_calculate.clicked.connect(handle_calculate)
-    # window.btn_view_history.clicked.connect(show_history)
-
+    window = BudgetWindow()
     window.show()
     sys.exit(app.exec())
 

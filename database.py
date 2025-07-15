@@ -12,8 +12,6 @@ def init_db():
             id INTEGER PRIMARY KEY,
             month TEXT,
             income REAL,
-            debt REAL,
-            dates REAL,
             needs REAL,
             wants REAL,
             savings REAL
@@ -26,13 +24,11 @@ def save_budget(month, income, plan):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO budgets (month, income, debt, dates, needs, wants, savings)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO budgets (month, income, needs, wants, savings)
+        VALUES (?, ?, ?, ?, ?)
     """, (
         month,
         income,
-        plan['Debt'],
-        plan['Dates'],
         plan['Needs'],
         plan['Wants'],
         plan['Savings']
